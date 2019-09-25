@@ -38,18 +38,26 @@ import org.apache.flume.instrumentation.kafka.KafkaSinkCounter;
 import org.apache.flume.shared.kafka.KafkaSSLUtil;
 import org.apache.flume.sink.AbstractSink;
 import org.apache.flume.source.avro.AvroFlumeEvent;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.CreateTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.KafkaFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +128,9 @@ public class KafkaSink extends AbstractSink implements Configurable, BatchSizeSu
   private Integer staticPartitionId = null;
   private boolean allowTopicOverride;
   private String topicHeader = null;
+  private List<String> topics = new ArrayList<String>();
+  private int numOfNodes = 0;
+  private AdminClient adminClient = null;
 
   private Optional<SpecificDatumWriter<AvroFlumeEvent>> writer =
           Optional.absent();
@@ -224,14 +235,23 @@ public class KafkaSink extends AbstractSink implements Configurable, BatchSizeSu
             record = new ProducerRecord<String, byte[]>(eventTopic, eventKey,
                 serializeEvent(event, useAvroEventFormat));
           }
+          
+          if (!topics.contains(eventTopic)) {
+        	  NewTopic newTopic = new NewTopic(eventTopic, 3, new Short(Integer.toString(numOfNodes)));
+        	  List<NewTopic> newTopics = new ArrayList<NewTopic>();
+        	  newTopics.add(newTopic);
+        	  CreateTopicsResult createdTopics = adminClient.createTopics(newTopics);
+          }
+
           kafkaFutures.add(producer.send(record, new SinkCallback(startTime)));
-        } catch (NumberFormatException ex) {
+      	} catch (NumberFormatException ex) {
           throw new EventDeliveryException("Non integer partition id specified", ex);
         } catch (Exception ex) {
+        	ex.printStackTrace();
           // N.B. The producer.send() method throws all sorts of RuntimeExceptions
           // Catching Exception here to wrap them neatly in an EventDeliveryException
           // which is what our consumers will expect
-          throw new EventDeliveryException("Could not send event", ex);
+//          throw new EventDeliveryException("Could not send event", ex);
         }
       }
 
@@ -357,6 +377,21 @@ public class KafkaSink extends AbstractSink implements Configurable, BatchSizeSu
 
     if (counter == null) {
       counter = new KafkaSinkCounter(getName());
+    }
+    
+    //generate list of all topics in this cluster for cases where auto topic creation if off
+    Map<String, Object> adminProps = new HashMap<String, Object>();
+    adminProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootStrapServers);
+    adminClient = AdminClient.create(adminProps);
+
+    try {
+    	numOfNodes = adminClient.describeCluster().nodes().get().size();
+    	Iterator<TopicListing> iter = adminClient.listTopics().listings().get().iterator();
+    	while (iter.hasNext()) {
+    		topics.add(iter.next().name());
+    	}
+    } catch (Exception e) {
+    	//do nothing.. 
     }
   }
 

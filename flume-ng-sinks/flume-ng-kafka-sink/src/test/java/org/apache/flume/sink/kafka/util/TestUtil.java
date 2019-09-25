@@ -114,6 +114,8 @@ public class TestUtil {
       kafkaProperties.setProperty("zookeeper.connect", getZkUrl());
       // override the Kafka server port
       kafkaProperties.setProperty("port", Integer.toString(kafkaLocalPort));
+      kafkaProperties.setProperty("auto.create.topics.enable", "false");
+      
       kafkaServer = new KafkaLocal(kafkaProperties);
       kafkaServer.start();
       logger.info("Kafka Server is successfully started on port " + kafkaLocalPort);
