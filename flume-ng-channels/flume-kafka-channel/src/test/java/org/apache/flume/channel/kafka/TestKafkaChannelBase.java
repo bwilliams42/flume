@@ -59,7 +59,7 @@ public class TestKafkaChannelBase {
 
   @BeforeClass
   public static void setupClass() throws Exception {
-    testUtil.prepare();
+    testUtil.prepare(null);
     Thread.sleep(2500);
   }
 

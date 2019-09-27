@@ -36,6 +36,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map.Entry;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -90,8 +92,9 @@ public class TestUtil {
     }
   }
 
-  private boolean startEmbeddedKafkaServer() {
-    Properties kafkaProperties = new Properties();
+  private boolean startEmbeddedKafkaServer(Properties kafkaPropertyOverrides) {
+	
+	Properties kafkaProperties = new Properties();
     Properties zkProperties = new Properties();
 
     logger.info("Starting kafka server.");
@@ -116,6 +119,12 @@ public class TestUtil {
       kafkaProperties.setProperty("port", Integer.toString(kafkaLocalPort));
       kafkaProperties.setProperty("auto.create.topics.enable", "false");
       
+
+      if (kafkaPropertyOverrides != null ) {
+    	  for (Entry<Object, Object> entry : kafkaPropertyOverrides.entrySet()) {
+    		  kafkaProperties.setProperty((String)entry.getKey(), (String) entry.getValue());
+    	  }
+      }
       kafkaServer = new KafkaLocal(kafkaProperties);
       kafkaServer.start();
       logger.info("Kafka Server is successfully started on port " + kafkaLocalPort);
@@ -185,12 +194,12 @@ public class TestUtil {
     return consumer.poll(Duration.ofMillis(1000L));
   }
 
-  public void prepare() {
+  public void prepare(Properties kafkaPropertyOverrides) {
 
     if (externalServers) {
       return;
     }
-    boolean startStatus = startEmbeddedKafkaServer();
+    boolean startStatus = startEmbeddedKafkaServer(kafkaPropertyOverrides);
     if (!startStatus) {
       throw new RuntimeException("Error starting the server!");
     }
