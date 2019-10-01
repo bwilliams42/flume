@@ -56,6 +56,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -129,7 +130,7 @@ public class KafkaSink extends AbstractSink implements Configurable, BatchSizeSu
   private boolean allowTopicOverride;
   private String topicHeader = null;
   private List<String> topics = new ArrayList<String>();
-  private int numOfNodes = 0;
+  private short replicationFactor = 3;
   private AdminClient adminClient = null;
 
   private Optional<SpecificDatumWriter<AvroFlumeEvent>> writer =
@@ -235,19 +236,21 @@ public class KafkaSink extends AbstractSink implements Configurable, BatchSizeSu
             record = new ProducerRecord<String, byte[]>(eventTopic, eventKey,
                 serializeEvent(event, useAvroEventFormat));
           }
-          
+
           if (!topics.contains(eventTopic)) {
-        	  NewTopic newTopic = new NewTopic(eventTopic, 3, new Short(Integer.toString(numOfNodes)));
-        	  List<NewTopic> newTopics = new ArrayList<NewTopic>();
-        	  newTopics.add(newTopic);
-        	  CreateTopicsResult createdTopics = adminClient.createTopics(newTopics);
+              logger.info("New topic found: {}", eventTopic);
+              NewTopic newTopic = new NewTopic(eventTopic, 3, replicationFactor);
+              CreateTopicsResult createdTopic = adminClient.createTopics(Collections.singleton(newTopic));
+              createdTopic.values().get(eventTopic).get();
+              logger.info("New topic created: {}", eventTopic);
+              topics.add(eventTopic);
           }
 
           kafkaFutures.add(producer.send(record, new SinkCallback(startTime)));
-      	} catch (NumberFormatException ex) {
+          } catch (NumberFormatException ex) {
           throw new EventDeliveryException("Non integer partition id specified", ex);
         } catch (Exception ex) {
-        	ex.printStackTrace();
+            ex.printStackTrace();
           // N.B. The producer.send() method throws all sorts of RuntimeExceptions
           // Catching Exception here to wrap them neatly in an EventDeliveryException
           // which is what our consumers will expect
@@ -380,18 +383,25 @@ public class KafkaSink extends AbstractSink implements Configurable, BatchSizeSu
     }
     
     //generate list of all topics in this cluster for cases where auto topic creation if off
-    Map<String, Object> adminProps = new HashMap<String, Object>();
-    adminProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootStrapServers);
-    adminClient = AdminClient.create(adminProps);
+//    Map<String, Object> adminProps = new HashMap<String, Object>();
+//    adminProps.putAll(context.getSubProperties(KAFKA_PRODUCER_PREFIX));
+//    adminProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootStrapServers);
+
+    adminClient = AdminClient.create(getKafkaProps());
 
     try {
-    	numOfNodes = adminClient.describeCluster().nodes().get().size();
-    	Iterator<TopicListing> iter = adminClient.listTopics().listings().get().iterator();
-    	while (iter.hasNext()) {
-    		topics.add(iter.next().name());
-    	}
+        replicationFactor = new Short(adminClient.describeCluster().nodes().get().size() >= 3 ? "3" : "1");
+        Iterator<TopicListing> iter = adminClient.listTopics().listings().get().iterator();
+        logger.info("====== Begin Topic caching =====");
+        logger.info("Brokers/Nodes: {} ======", adminClient.describeCluster().nodes().get().toString());
+        while (iter.hasNext()) {
+            String topic = iter.next().name();
+            logger.info("Caching topic: {}", topic);
+            topics.add(topic);
+        }
+        logger.info("====== End topic caching ======");
     } catch (Exception e) {
-    	//do nothing.. 
+        //do nothing.. 
     }
   }
 

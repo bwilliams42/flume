@@ -272,60 +272,48 @@ public class TestKafkaSink {
     checkMessageArrived(msg, TestConstants.CUSTOM_TOPIC);
   }
 
-//  @Test
-//  public void testTopicAndKeyFromHeaderTopicCreation() {
-//	//stop server and restart
-//	testUtil.tearDown();
-//	Properties kafkaPropertyOverrides = new Properties();
-//	kafkaPropertyOverrides.setProperty("auto.create.topics.enable", "false");
-//	testUtil.prepare(kafkaPropertyOverrides);
-//    List<String> topics = new ArrayList<String>(3);
-//    topics.add(DEFAULT_TOPIC);
-//    topics.add(TestConstants.STATIC_TOPIC);
-//    topics.add(TestConstants.CUSTOM_TOPIC);
-//    topics.add(TestConstants.HEADER_1_VALUE + "-topic");
-//    testUtil.initTopicList(topics);
-//
-//    Sink kafkaSink = new KafkaSink();
-//    Context context = prepareDefaultContext();
-//    Configurables.configure(kafkaSink, context);
-//    Channel memoryChannel = new MemoryChannel();
-//    Configurables.configure(memoryChannel, context);
-//    kafkaSink.setChannel(memoryChannel);
-//    kafkaSink.start();
-//
-//    String msg = "test-topic-and-key-from-header";
-//    Map<String, String> headers = new HashMap<String, String>();
-//    headers.put("topic", TestConstants.CUSTOM_TOPIC);
-//    headers.put("key", TestConstants.CUSTOM_KEY);
-//    Transaction tx = memoryChannel.getTransaction();
-//    tx.begin();
-//    Event event = EventBuilder.withBody(msg.getBytes(), headers);
-//    memoryChannel.put(event);
-//    tx.commit();
-//    tx.close();
-//
-//    try {
-//      Sink.Status status = kafkaSink.process();
-//      if (status == Sink.Status.BACKOFF) {
-//        fail("Error Occurred");
-//      }
-//    } catch (EventDeliveryException ex) {
-//      // ignore
-//    }
-//
-//    checkMessageArrived(msg, TestConstants.CUSTOM_TOPIC);
-//    
-//    //restart embedded  server with original details
-//    testUtil.tearDown();
-//    try {
-//        Thread.sleep(5 * 1000);   // add this sleep time to
-//        // ensure that the server is fully started before proceeding with tests.
-//      } catch (InterruptedException e) {
-//        // ignore
-//      }
-//    testUtil.prepare(null);
-//  }
+  @Test
+  public void testTopicAndKeyFromHeaderAutoTopicCreationFalse() {
+	tearDown();
+	Properties kafkaPropertyOverrides = new Properties();
+	kafkaPropertyOverrides.setProperty("auto.create.topics.enable", "false");
+	testUtil.prepare(kafkaPropertyOverrides);
+    List<String> topics = new ArrayList<String>(3);
+    topics.add(TestConstants.CUSTOM_TOPIC);
+    testUtil.initTopicList(topics);
+
+    Sink kafkaSink = new KafkaSink();
+    Context context = prepareDefaultContext();
+    Configurables.configure(kafkaSink, context);
+    Channel memoryChannel = new MemoryChannel();
+    Configurables.configure(memoryChannel, context);
+    kafkaSink.setChannel(memoryChannel);
+    kafkaSink.start();
+
+    String msg = "test-topic-and-key-from-header";
+    Map<String, String> headers = new HashMap<String, String>();
+    headers.put("topic", TestConstants.CUSTOM_TOPIC);
+    headers.put("key", TestConstants.CUSTOM_KEY);
+    Transaction tx = memoryChannel.getTransaction();
+    tx.begin();
+    Event event = EventBuilder.withBody(msg.getBytes(), headers);
+    memoryChannel.put(event);
+    tx.commit();
+    tx.close();
+
+    try {
+      Sink.Status status = kafkaSink.process();
+      if (status == Sink.Status.BACKOFF) {
+        fail("Error Occurred");
+      }
+    } catch (EventDeliveryException ex) {
+      // ignore
+    }
+
+    checkMessageArrived(msg, TestConstants.CUSTOM_TOPIC);
+    tearDown();
+    setup();
+  }
 
   /**
    * Tests that a message will be produced to a topic as specified by a
